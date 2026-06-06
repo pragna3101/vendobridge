@@ -1,0 +1,276 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              Int           @id @default(autoincrement())
+  email           String        @unique
+  password        String
+  firstName       String
+  lastName        String
+  role            String        @default("VENDOR")
+  phone           String?
+  country         String?
+  additionalInfo  String?
+  avatarUrl       String?
+  status          String        @default("ACTIVE")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  vendors         Vendor[]
+  rfqs            Rfq[]         @relation("CreatedRFQs")
+  approvals       Approval[]    @relation("ManagerApprovals")
+  notifications   Notification[]
+  activityLogs    ActivityLog[]
+
+  @@index([email])
+}
+
+model VendorCategory {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  vendors     Vendor[]
+}
+
+model Vendor {
+  id            Int             @id @default(autoincrement())
+  companyName   String
+  categoryId    Int
+  category      VendorCategory  @relation(fields: [categoryId], references: [id])
+  gstNumber     String          @unique
+  panNumber     String          @unique
+  address       String
+  city          String
+  state         String
+  country       String
+  pincode       String
+  contactPerson String
+  email         String          @unique
+  mobile        String
+  website       String?
+  rating        Float           @default(5.0)
+  status        String          @default("PENDING")
+  userId        Int?            @unique
+  user          User?           @relation(fields: [userId], references: [id])
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime?
+
+  invitations   VendorInvitation[]
+  quotations    Quotation[]
+  purchaseOrders PurchaseOrder[]
+  invoices      Invoice[]
+
+  @@index([categoryId])
+  @@index([email])
+}
+
+model Rfq {
+  id            Int                @id @default(autoincrement())
+  rfqNumber     String             @unique
+  title         String
+  description   String
+  categoryId    Int
+  deadline      DateTime
+  budget        Float?
+  attachmentUrl String?
+  status        String             @default("DRAFT")
+  createdById   Int
+  createdBy     User               @relation("CreatedRFQs", fields: [createdById], references: [id])
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  deletedAt     DateTime?
+
+  items         RfqItem[]
+  invitations   VendorInvitation[]
+  quotations    Quotation[]
+  approvals     Approval[]
+
+  @@index([createdById])
+}
+
+model RfqItem {
+  id          Int      @id @default(autoincrement())
+  rfqId       Int
+  rfq         Rfq      @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  itemName    String
+  quantity    Float
+  unit        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([rfqId])
+}
+
+model VendorInvitation {
+  id          Int              @id @default(autoincrement())
+  rfqId       Int
+  rfq         Rfq              @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  vendorId    Int
+  vendor      Vendor           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  emailSent   Boolean          @default(false)
+  status      String           @default("PENDING")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([rfqId, vendorId])
+  @@index([rfqId])
+  @@index([vendorId])
+}
+
+model Quotation {
+  id               Int             @id @default(autoincrement())
+  quotationNumber  String          @unique
+  rfqId            Int
+  rfq              Rfq             @relation(fields: [rfqId], references: [id])
+  vendorId         Int
+  vendor           Vendor          @relation(fields: [vendorId], references: [id])
+  deliveryTimeline Int
+  taxRate          Float           @default(18.0)
+  taxAmount        Float
+  subtotal         Float
+  grandTotal       Float
+  notes            String?
+  attachmentUrl    String?
+  status           String          @default("DRAFT")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  deletedAt        DateTime?
+
+  items            QuotationItem[]
+  approvals        Approval[]
+  purchaseOrders   PurchaseOrder[]
+
+  @@index([rfqId])
+  @@index([vendorId])
+}
+
+model QuotationItem {
+  id          Int       @id @default(autoincrement())
+  quotationId Int
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  itemName    String
+  quantity    Float
+  unitPrice   Float
+  totalPrice  Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([quotationId])
+}
+
+model Approval {
+  id          Int            @id @default(autoincrement())
+  rfqId       Int
+  rfq         Rfq            @relation(fields: [rfqId], references: [id])
+  quotationId Int
+  quotation   Quotation      @relation(fields: [quotationId], references: [id])
+  status      String         @default("PENDING")
+  remarks     String?
+  managerId   Int
+  manager     User           @relation("ManagerApprovals", fields: [managerId], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([rfqId])
+  @@index([quotationId])
+  @@index([managerId])
+}
+
+model PurchaseOrder {
+  id          Int                 @id @default(autoincrement())
+  poNumber    String              @unique
+  quotationId Int
+  quotation   Quotation           @relation(fields: [quotationId], references: [id])
+  vendorId    Int
+  vendor      Vendor              @relation(fields: [vendorId], references: [id])
+  orderDate   DateTime            @default(now())
+  subtotal    Float
+  taxAmount   Float
+  grandTotal  Float
+  status      String              @default("GENERATED")
+  pdfUrl      String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  deletedAt   DateTime?
+
+  items       PurchaseOrderItem[]
+  invoices    Invoice[]
+
+  @@index([quotationId])
+  @@index([vendorId])
+}
+
+model PurchaseOrderItem {
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  itemName        String
+  quantity        Float
+  unitPrice       Float
+  taxRate         Float         @default(18.0)
+  totalPrice      Float
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([purchaseOrderId])
+}
+
+model Invoice {
+  id            Int           @id @default(autoincrement())
+  invoiceNumber String        @unique
+  poId          Int
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id])
+  vendorId      Int
+  vendor        Vendor        @relation(fields: [vendorId], references: [id])
+  subtotal      Float
+  taxAmount     Float
+  grandTotal    Float
+  status        String        @default("DRAFT")
+  pdfUrl        String?
+  emailSent     Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  @@index([poId])
+  @@index([vendorId])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model ActivityLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String
+  module      String
+  description String
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
